@@ -351,6 +351,31 @@
             return new GoogleGenAI({ apiKey: state.apiKey });
         };
 
+        const extractText = (response) => {
+            console.log("Extracting text from:", response);
+            if (!response) return "";
+
+            // 1. Try standard candidates array (Raw JSON or some SDKs)
+            if (response.candidates && Array.isArray(response.candidates) && response.candidates.length > 0) {
+                const first = response.candidates[0];
+                if (first.content && first.content.parts && Array.isArray(first.content.parts) && first.content.parts.length > 0) {
+                    return first.content.parts[0].text || "";
+                }
+            }
+
+            // 2. Try .text() function (Standard GoogleGenAI SDK)
+            if (typeof response.text === 'function') {
+                return response.text();
+            }
+
+            // 3. Try .text property (some mocks or alternative SDKs)
+            if (typeof response.text === 'string') {
+                return response.text;
+            }
+
+            return "";
+        };
+
         const enhancePrompt = async () => {
             const ai = getAiClient();
             // List of models to try
@@ -419,8 +444,8 @@
                     });
 
                     // Check for standard text output in new SDK
-                    // Usually response.text() is available in newer generic/experimental SDKs or we access candidates
-                    return response.text ? response.text() : (response.candidates?.[0]?.content?.parts?.[0]?.text || "");
+                    console.log("Gemini Response:", response);
+                    return extractText(response);
                 } catch (err) {
                     console.warn(`Model ${modelId} failed:`, err.message);
                     lastError = err;
@@ -435,7 +460,7 @@
 
         const generateImage = async (prompt) => {
             const ai = getAiClient();
-            // 用 Nano Banana Pro 生成圖片要用 gemini-3-pro-image-preview
+            // 用 Nano Banana Pro 生成圖片要用 gemini-3-pro-image-preview，目前 AI Studio 申請的 API Key 只能用 gemini-2.5-flash，要綁信用卡才能用 gemini-3-pro-image-preview
             const modelId = "gemini-3-pro-image-preview";
 
             try {
@@ -445,7 +470,8 @@
                     contents: { parts: [{ text: "Generate an image: " + prompt }] }
                 });
                 // Attempt to extract text or handle image if SDK returns differently
-                return response.text ? response.text() : (response.candidates?.[0]?.content?.parts?.[0]?.text || "");
+                console.log("Image Gen Response:", response);
+                return extractText(response);
             } catch (e) {
                 console.error(e);
                 throw e;
