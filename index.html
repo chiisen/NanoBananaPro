@@ -49,7 +49,7 @@
     <script type="importmap">
     {
       "imports": {
-        "@google/genai": "https://esm.run/@google/genai"
+        "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0"
       }
     }
     </script>
@@ -118,6 +118,15 @@
                 <div id="optionsPanel"
                     class="mt-6 p-5 rounded-2xl border bg-white border-gray-200 dark:bg-slate-800/50 dark:border-slate-700/50 transition-all duration-300 hidden">
                     <!-- Dynamic Options will be injected here -->
+                </div>
+
+                <!-- DEBUG PROMPT PANEL -->
+                <div id="debugPromptPanel"
+                    class="mt-4 p-3 rounded-xl bg-gray-100 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-xs text-gray-500 dark:text-slate-400 font-mono hidden">
+                    <div class="flex items-center gap-2 mb-1 text-indigo-500 font-bold uppercase tracking-wider">
+                        <i class="fas fa-bug"></i> Prompt Debug
+                    </div>
+                    <div id="debugPromptText">Hover over a button to see its prompt...</div>
                 </div>
 
                 <!-- Aspect Ratio -->
@@ -250,7 +259,52 @@
             { id: 'DIGITAL_ART', label: '數位繪畫', icon: '🎨', desc: '油畫、概念藝術', baseSystemPrompt: `You are an expert... specializing in Digital Painting...` },
             { id: 'LOGO_DESIGN', label: 'Logo 設計', icon: '💠', desc: '向量、極簡風格', baseSystemPrompt: `You are an expert... specializing in Vector and Logo design...` },
             { id: 'PIXEL_ART', label: '像素藝術', icon: '👾', desc: '復古遊戲風格', baseSystemPrompt: `You are an expert... specializing in Pixel Art...` }
+
         ];
+
+        // ==========================================
+        // 1.1 PROMPT MAPPINGS (Centralized Logic)
+        // ==========================================
+        const PROMPT_MAPPINGS = {
+            MANGA: {
+                mangaLayout: {
+                    'SINGLE': '特殊指令: 單幅精緻插畫...',
+                    'FOUR_PANEL': '特殊指令: 用戶需要四格漫畫 (Yon-koma)...',
+                    'SIX_PANEL': '特殊指令: 用戶需要六格漫畫 (Six-panel)...',
+                    'COVER': '特殊指令: 用戶需要漫畫單行本封面...'
+                },
+                mangaStyle: {
+                    'JAPANESE': '「日系漫畫風格 (Japanese Manga)」、「網點 (Screentones)」',
+                    'AMERICAN': '「美式漫畫風格 (American Comic)」、「粗獷輪廓」',
+                    'KOREAN': '「韓漫風格 (Korean Webtoon)」、「全彩現代」',
+                    'PIXEL': '「像素漫畫 (Pixel Art Manga)」'
+                }
+            },
+            CINEMATIC_3D: {
+                cinematicStyle: {
+                    'HYPER_REALISTIC': '極致寫實 (Hyper-realistic), 8k textures...',
+                    'DISNEY': '迪士尼風格 (Disney Animation), soft lighting...',
+                    'PIXAR': '皮克斯風格 (Pixar Style), stylized realism...',
+                    'CYBERPUNK': '賽博龐克 (Cyberpunk), neon lights...',
+                }
+            },
+            LINE_STICKER: {
+                stickerLayout: {
+                    'SINGLE': '佈局: 1張貼圖排列',
+                    'SET': '佈局: 8張貼圖排列'
+                },
+                style: {
+                    'DEFAULT': '風格: LINE 貼圖風格，每張必須包含隨機繁體中文說明。NO WHITE BORDER (無白邊)。'
+                }
+            },
+            ADVERTISEMENT: {
+                adMode: {
+                    'PODIUM': '拍攝模式: 展示台 (Podium/Platform)...',
+                    'HAND_MODEL': '拍攝模式: 手部特寫 (Hand Model), 高質感膚質...',
+                    'FULL_MODEL': '拍攝模式: 模特兒情境 (Full Body Model)...'
+                }
+            }
+        };
 
         // ==========================================
         // 2. STATE MANAGEMENT
@@ -299,8 +353,9 @@
 
         const enhancePrompt = async () => {
             const ai = getAiClient();
-            // List of models to try in order of preference/cost/speed
-            const modelsToTry = ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro", "gemini-pro"];
+            // List of models to try
+            // 強化提示詞，目前測試只有 gemini-2.5-flash 可以正常執行
+            const modelsToTry = ["gemini-2.5-flash"];
 
             const cat = CATEGORIES.find(c => c.id === state.selectedCategoryId);
 
@@ -310,37 +365,16 @@
 
             // --- LOGIC GATES ---
             if (state.selectedCategoryId === 'MANGA') {
-                // Layout
-                const layouts = {
-                    'FOUR_PANEL': '特殊指令: 用戶需要四格漫畫 (Yon-koma)...',
-                    'SIX_PANEL': '特殊指令: 用戶需要六格漫畫 (Six-panel)...',
-                    'COVER': '特殊指令: 用戶需要漫畫單行本封面...',
-                    'SINGLE': '特殊指令: 單幅精緻插畫...'
-                };
-                layoutInstruction = layouts[state.options.mangaLayout] || layouts['SINGLE'];
-
-                // Style
-                const styles = {
-                    'JAPANESE': '「日系漫畫風格 (Japanese Manga)」、「網點 (Screentones)」',
-                    'AMERICAN': '「美式漫畫風格 (American Comic)」、「粗獷輪廓」',
-                    'KOREAN': '「韓漫風格 (Korean Webtoon)」、「全彩現代」',
-                    'PIXEL': '「像素漫畫 (Pixel Art Manga)」'
-                };
-                styleVariationInstruction = `風格設定: ${styles[state.options.mangaStyle] || styles['JAPANESE']}`;
+                layoutInstruction = PROMPT_MAPPINGS.MANGA.mangaLayout[state.options.mangaLayout] || PROMPT_MAPPINGS.MANGA.mangaLayout['SINGLE'];
+                styleVariationInstruction = `風格設定: ${PROMPT_MAPPINGS.MANGA.mangaStyle[state.options.mangaStyle] || PROMPT_MAPPINGS.MANGA.mangaStyle['JAPANESE']}`;
             }
             else if (state.selectedCategoryId === 'CINEMATIC_3D') {
-                const styles = {
-                    'HYPER_REALISTIC': '極致寫實 (Hyper-realistic), 8k textures...',
-                    'DISNEY': '迪士尼風格 (Disney Animation), soft lighting...',
-                    'PIXAR': '皮克斯風格 (Pixar Style), stylized realism...',
-                    'CYBERPUNK': '賽博龐克 (Cyberpunk), neon lights...',
-                };
-                styleVariationInstruction = `SELECTED STYLE: ${styles[state.options.cinematicStyle] || styles['HYPER_REALISTIC']}\nCRITICAL: Do NOT mix styles.`;
+                const stylePrompt = PROMPT_MAPPINGS.CINEMATIC_3D.cinematicStyle[state.options.cinematicStyle] || PROMPT_MAPPINGS.CINEMATIC_3D.cinematicStyle['HYPER_REALISTIC'];
+                styleVariationInstruction = `SELECTED STYLE: ${stylePrompt}\nCRITICAL: Do NOT mix styles.`;
             }
             else if (state.selectedCategoryId === 'LINE_STICKER') {
-                const count = state.options.stickerLayout === 'SINGLE' ? 1 : 8;
-                layoutInstruction = `佈局: ${count}張貼圖排列。CRITICAL: NO WHITE BORDER (無白邊)。`;
-                styleVariationInstruction = `風格: LINE 貼圖風格，每張必須包含隨機繁體中文說明。`;
+                layoutInstruction = PROMPT_MAPPINGS.LINE_STICKER.stickerLayout[state.options.stickerLayout] || PROMPT_MAPPINGS.LINE_STICKER.stickerLayout['SINGLE'];
+                styleVariationInstruction = PROMPT_MAPPINGS.LINE_STICKER.style.DEFAULT;
             }
             else if (state.selectedCategoryId === 'ADVERTISEMENT') {
                 if (state.options.adMode === 'HAND_MODEL') {
@@ -377,53 +411,41 @@
             for (const modelId of modelsToTry) {
                 try {
                     console.log(`Attempting generation with model: ${modelId}`);
+                    // Note: GoogleGenAI SDK usage
                     const response = await ai.models.generateContent({
                         model: modelId,
-                        contents: { parts: parts },
+                        contents: { parts: parts }, // Assuming SDK accepts this structure 
                         config: { systemInstruction: systemInstruction }
                     });
 
-                    return response.text().trim(); // Success return
+                    // Check for standard text output in new SDK
+                    // Usually response.text() is available in newer generic/experimental SDKs or we access candidates
+                    return response.text ? response.text() : (response.candidates?.[0]?.content?.parts?.[0]?.text || "");
                 } catch (err) {
                     console.warn(`Model ${modelId} failed:`, err.message);
                     lastError = err;
-                    // Provide specific hint for 429
                     if (err.message.includes("429") || err.message.includes("quota")) {
                         continue; // Try next model
                     }
-                    throw err; // Other errors (401 invalid key, etc) might be fatal
+                    continue; // Try next optional model
                 }
             }
-
-            // If loop finishes without return
             throw lastError || new Error("All models failed.");
         };
 
         const generateImage = async (prompt) => {
             const ai = getAiClient();
-            // Note: In real browser environment, CORS or Model availability might vary. 
-            // We use 'gemini-3-pro-image-preview' as requested, assuming user has access.
-            // If strictly text-only key, this might fail, but code logic is correct.
-            const modelId = "gemini-2.0-flash-exp"; // Fallback to a widely avail model if 3-pro not public yet, but sticking to prompt req:
-            const targetModel = "gemini-2.0-flash-exp"; // We'll use flash-exp for better availability in free tier for now or 3 if avail.
+            // 用 Nano Banana Pro 生成圖片要用 gemini-3-pro-image-preview
+            const modelId = "gemini-3-pro-image-preview";
 
-            // For image generation via API, currently Gemini API supports 'imagen-3.0-generate-001' or similar under the hood 
-            // OR returns base64. The SDK usage:
             try {
-                // Mocking implementation for Image because standard standard gemini-pro doesn't do text-to-image directly in all regions
-                // But let's try the requested logic.
+                // Update to match @google/genai syntax
                 const response = await ai.models.generateContent({
-                    model: "gemini-2.0-flash-exp", // Using latest public beta for multimodal
-                    contents: { parts: [{ text: "Generate an image: " + prompt }] },
-                    // generationConfig: { responseMimeType: "image/jpeg" } // Hypothetical
+                    model: modelId,
+                    contents: { parts: [{ text: "Generate an image: " + prompt }] }
                 });
-
-                // Since direct Image Gen API via JS SDK is specific, we might just return text for this replica 
-                // IF the model doesn't return inlineData. 
-                // However, let's assume standard text response for the 'Replica' unless we have access to Imagen.
-                // *Self-correction*: The USER wants a replica. I will implement the logic. 
-                // If it fails due to model permission, it handles error.
-                return null;
+                // Attempt to extract text or handle image if SDK returns differently
+                return response.text ? response.text() : (response.candidates?.[0]?.content?.parts?.[0]?.text || "");
             } catch (e) {
                 console.error(e);
                 throw e;
@@ -461,21 +483,36 @@
         // Render Options (Dynamic)
         const renderOptionControls = () => {
             const panel = document.getElementById('optionsPanel');
+            const debugPanel = document.getElementById('debugPromptPanel');
             const catId = state.selectedCategoryId;
 
             // Define controls HTML based on Category
             let controlsHtml = '';
 
             // Helper for buttons
-            const mkBtn = (group, value, label, current) => `
+            const mkBtn = (group, value, label, current) => {
+                // Resolve Prompt for Debug
+                let debugPrompt = "";
+                if (PROMPT_MAPPINGS[catId] && PROMPT_MAPPINGS[catId][group]) {
+                    debugPrompt = PROMPT_MAPPINGS[catId][group][value] || "";
+                }
+
+
+
+                // Clean string for HTML attribute
+                const safePrompt = debugPrompt.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+                return `
                 <button onclick="window.updateOption('${group}', '${value}')" 
+                    onmouseenter="window.showDebugPrompt('${safePrompt}')"
+                    onmouseleave="window.showDebugPrompt('')"
                     class="px-3 py-1.5 rounded-lg text-sm border transition-all
                     ${current === value
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300'}">
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-300'}">
                     ${label}
                 </button>
-            `;
+            `};
 
             if (catId === 'MANGA') {
                 controlsHtml += `
@@ -491,8 +528,13 @@
                         ${mkBtn('mangaStyle', 'PIXEL', '像素', state.options.mangaStyle)}
                     </div></div>
                 `;
-            } else if (catId === 'LIN_STICKER') { // Typo in const? No, it's LINE_STICKER
-                // ...
+            } else if (catId === 'LIN_STICKER' || catId === 'LINE_STICKER') {
+                controlsHtml += `
+                    <div class="mb-4"><h3 class="text-xs font-bold mb-2 text-indigo-500">貼圖數量</h3><div class="flex flex-wrap gap-2">
+                        ${mkBtn('stickerLayout', 'SINGLE', '單張 (1)', state.options.stickerLayout)}
+                        ${mkBtn('stickerLayout', 'SET', '套組 (8)', state.options.stickerLayout)}
+                    </div></div>
+                `;
             } else if (catId === 'ADVERTISEMENT') {
                 controlsHtml += `
                     <div class="mb-4"><h3 class="text-xs font-bold mb-2 text-indigo-500">拍攝模式</h3><div class="flex flex-wrap gap-2">
@@ -516,8 +558,23 @@
             if (controlsHtml) {
                 panel.innerHTML = controlsHtml;
                 panel.classList.remove('hidden');
+                if (debugPanel) debugPanel.classList.remove('hidden');
             } else {
                 panel.classList.add('hidden');
+                if (debugPanel) debugPanel.classList.add('hidden');
+            }
+        };
+
+        // Debug Prompt Handler
+        window.showDebugPrompt = (text) => {
+            const el = document.getElementById('debugPromptText');
+            if (!el) return;
+            if (text) {
+                el.innerText = text;
+                el.parentElement.classList.add('bg-indigo-50', 'dark:bg-indigo-900/20');
+            } else {
+                el.innerText = "Hover over a button to see its prompt...";
+                el.parentElement.classList.remove('bg-indigo-50', 'dark:bg-indigo-900/20');
             }
         };
 
@@ -619,6 +676,52 @@
             } catch (err) {
                 alert("Error: " + err.message);
                 output.innerText = "Error generating prompt.";
+            } finally {
+                overlay.classList.add('hidden');
+            }
+        });
+
+        // Generate Image Handler
+        document.getElementById('generateBtn').addEventListener('click', async () => {
+            const overlay = document.getElementById('loadingOverlay');
+            const previewContainer = document.getElementById('imagePreview');
+            // Prefer the enhanced prompt if available and valid
+            let prompt = document.getElementById('promptOutput').innerText;
+            if (!prompt || prompt.includes("Error") || prompt.length < 5) {
+                prompt = state.inputs.userText;
+            }
+
+            if (!prompt) {
+                alert("請先輸入描述或產生提示詞 (Please enter a prompt first)");
+                return;
+            }
+
+            try {
+                overlay.classList.remove('hidden');
+                document.getElementById('loadingText').innerText = "Generating Image...";
+                previewContainer.innerHTML = '<span class="text-gray-400 text-sm">Generating...</span>';
+
+                const result = await generateImage(prompt);
+
+                // Minimal handling for image display (assuming result is URL or base64 text for now, 
+                // or regular text if the model is chat-based). 
+                // Detailed image handling depends on the specific model response schema.
+                if (result) {
+                    // Check if result is a URL or Base64 (rough check)
+                    if (result.startsWith('http') || result.startsWith('data:image')) {
+                        previewContainer.innerHTML = `<img src="${result}" class="w-full h-full object-cover" alt="Generated Image">`;
+                    } else {
+                        // Likely text description or error
+                        previewContainer.innerHTML = `<div class="p-4 text-xs overflow-auto h-full w-full">${result}</div>`;
+                    }
+                } else {
+                    previewContainer.innerHTML = '<span class="text-red-500 text-sm">No result returned.</span>';
+                }
+
+            } catch (err) {
+                console.error(err);
+                alert("Error: " + err.message);
+                previewContainer.innerHTML = '<span class="text-red-500 text-sm">Generation Failed</span>';
             } finally {
                 overlay.classList.add('hidden');
             }
